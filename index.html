@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>期权集中押注分析 | Options Concentration Analyzer</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23f0b90b' stroke-width='4'/%3E%3Ctext x='50' y='58' text-anchor='middle' font-size='36' font-weight='bold' fill='%23f0b90b'%3E%24%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-left">
+                <h1>期权集中押注分析</h1>
+                <span class="subtitle">BTC / ETH 大资金行权价与结算追踪</span>
+            </div>
+            <div class="header-right">
+                <div class="last-update">
+                    <span>最后更新: <span id="last-update-time">--</span></span>
+                    <button class="refresh-btn" id="refresh-btn" title="刷新数据">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 价格摘要 -->
+        <div class="price-summary" id="price-summary">
+            <div class="price-card btc">
+                <div class="price-label">
+                    <span class="coin-icon">₿</span> BTC
+                </div>
+                <div class="price-value" id="btc-price">--</div>
+                <div class="price-change" id="btc-change">--</div>
+            </div>
+            <div class="price-card eth">
+                <div class="price-label">
+                    <span class="coin-icon">Ξ</span> ETH
+                </div>
+                <div class="price-value" id="eth-price">--</div>
+                <div class="price-change" id="eth-change">--</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">BTC Call/Put 比率</div>
+                <div class="metric-value" id="btc-pcr">--</div>
+                <div class="metric-hint" id="btc-pcr-hint">--</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">ETH Call/Put 比率</div>
+                <div class="metric-value" id="eth-pcr">--</div>
+                <div class="metric-hint" id="eth-pcr-hint">--</div>
+            </div>
+        </div>
+
+        <!-- 到期日选择 -->
+        <div class="expiry-selector" id="expiry-selector">
+            <span class="selector-label">选择结算日:</span>
+            <div class="expiry-tabs" id="expiry-tabs"></div>
+            <div class="coin-toggle">
+                <button class="coin-btn active" data-coin="BTC">BTC</button>
+                <button class="coin-btn" data-coin="ETH">ETH</button>
+            </div>
+        </div>
+
+        <!-- 主要内容区 -->
+        <div class="main-grid">
+            <!-- 左侧：Max Pain + 持仓分布 -->
+            <div class="left-panel">
+                <div class="panel maxpain-panel">
+                    <div class="panel-header">
+                        <h2>最大痛点 (Max Pain)</h2>
+                        <span class="panel-subtitle">卖方最优结算价</span>
+                    </div>
+                    <div class="maxpain-display" id="maxpain-display">
+                        <div class="maxpain-item">
+                            <span class="maxpain-label">Max Pain</span>
+                            <span class="maxpain-value" id="maxpain-strike">--</span>
+                        </div>
+                        <div class="maxpain-item">
+                            <span class="maxpain-label">当前价格</span>
+                            <span class="maxpain-value" id="spot-price">--</span>
+                        </div>
+                        <div class="maxpain-item">
+                            <span class="maxpain-label">偏离度</span>
+                            <span class="maxpain-value" id="maxpain-deviation">--</span>
+                        </div>
+                        <div class="maxpain-item">
+                            <span class="maxpain-label">总持仓 ($)</span>
+                            <span class="maxpain-value" id="total-oi">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel chart-panel">
+                    <div class="panel-header">
+                        <h2>持仓分布热力图</h2>
+                        <span class="panel-subtitle">按行权价的 Call / Put 持仓量</span>
+                    </div>
+                    <div class="chart-legend">
+                        <span class="legend-call">▬ Call 持仓</span>
+                        <span class="legend-put">▬ Put 持仓</span>
+                        <span class="legend-maxpain">▬ Max Pain</span>
+                        <span class="legend-spot">▬ 现货价</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="oi-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：结算日历 + 大押注 -->
+            <div class="right-panel">
+                <div class="panel calendar-panel">
+                    <div class="panel-header">
+                        <h2>结算日历</h2>
+                        <span class="panel-subtitle"> upcoming expiries</span>
+                    </div>
+                    <div class="calendar-list" id="calendar-list"></div>
+                </div>
+
+                <div class="panel concentration-panel">
+                    <div class="panel-header">
+                        <h2>大押注区域</h2>
+                        <span class="panel-subtitle">持仓最集中的行权价</span>
+                    </div>
+                    <div class="concentration-list" id="concentration-list"></div>
+                </div>
+
+                <div class="panel skew-panel">
+                    <div class="panel-header">
+                        <h2>波动率偏度</h2>
+                        <span class="panel-subtitle">25 Delta Skew</span>
+                    </div>
+                    <div class="skew-display" id="skew-display">
+                        <div class="skew-item">
+                            <span class="skew-label">当前 Skew</span>
+                            <span class="skew-value" id="skew-value">--</span>
+                        </div>
+                        <div class="skew-bar-container">
+                            <div class="skew-bar" id="skew-bar"></div>
+                            <div class="skew-labels">
+                                <span>极度看跌</span>
+                                <span>中性</span>
+                                <span>极度看涨</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="spinner"></div>
+            <p>正在加载期权数据...</p>
+        </div>
+
+        <footer class="footer">
+            <p>数据来源: Deribit | 数据每 5 分钟自动刷新 | 投资有风险，分析仅供参考</p>
+        </footer>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/analytics.js"></script>
+    <script src="js/chart.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
