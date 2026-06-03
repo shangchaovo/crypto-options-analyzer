@@ -207,10 +207,7 @@ const Chart = (() => {
     distribution.forEach((d, i) => {
       if (i % labelStep === 0 || i === distribution.length - 1) {
         const x = margin.left + i * barWidth + barWidth / 2;
-        let label = d.strike >= 1000
-          ? (d.strike / 1000).toFixed(d.strike >= 10000 ? 0 : 1) + 'K'
-          : d.strike.toString();
-        ctx.fillText(label, x, margin.top + h + 6);
+        ctx.fillText(Analytics.formatNumber(d.strike, 0), x, margin.top + h + 6);
       }
     });
 

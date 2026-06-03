@@ -4,26 +4,12 @@
  * Can be run via cron to cache JSON for GFW-blocked environments
  */
 
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { curlFetch } = require('../lib/curl-fetch');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DERIBIT_API = 'www.deribit.com';
-
-function curlFetch(url) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('curl', ['-s', '--max-time', '25', url]);
-    let stdout = '', stderr = '';
-    proc.stdout.on('data', chunk => stdout += chunk);
-    proc.stderr.on('data', chunk => stderr += chunk);
-    proc.on('close', code => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(stderr || `curl exited ${code}`));
-    });
-    proc.on('error', reject);
-  });
-}
 
 function fetchJSON(endpoint, params = {}) {
   const qs = new URLSearchParams(params).toString();

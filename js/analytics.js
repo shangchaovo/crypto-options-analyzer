@@ -72,13 +72,11 @@ const Analytics = (() => {
 
   // Calculate Call/Put ratio by open interest
   function calculatePCR(options) {
-    const callOi = options
-      .filter(o => o.type === 'call')
-      .reduce((sum, o) => sum + o.openInterestCoin, 0);
-    const putOi = options
-      .filter(o => o.type === 'put')
-      .reduce((sum, o) => sum + o.openInterestCoin, 0);
-
+    let callOi = 0, putOi = 0;
+    for (const o of options) {
+      if (o.type === 'call') callOi += o.openInterestCoin;
+      else putOi += o.openInterestCoin;
+    }
     const pcr = callOi > 0 ? putOi / callOi : 0;
     return { pcr, callOi, putOi, totalOi: callOi + putOi };
   }
@@ -117,25 +115,39 @@ const Analytics = (() => {
 
   // Build strike distribution for chart
   function buildStrikeDistribution(options) {
-    const strikes = [...new Set(options.map(o => o.strike))].sort((a, b) => a - b);
-    const distribution = [];
-
-    for (const strike of strikes) {
-      const calls = options.filter(o => o.strike === strike && o.type === 'call');
-      const puts = options.filter(o => o.strike === strike && o.type === 'put');
-
-      distribution.push({
-        strike,
-        callOi: calls.reduce((s, o) => s + o.openInterestCoin, 0),
-        putOi: puts.reduce((s, o) => s + o.openInterestCoin, 0),
-        callOiUsd: calls.reduce((s, o) => s + o.openInterestUsd, 0),
-        putOiUsd: puts.reduce((s, o) => s + o.openInterestUsd, 0),
-        callIv: calls.length > 0 ? calls.reduce((s, o) => s + o.iv, 0) / calls.length : 0,
-        putIv: puts.length > 0 ? puts.reduce((s, o) => s + o.iv, 0) / puts.length : 0,
-      });
+    // Single-pass grouping by strike
+    const map = new Map();
+    for (const o of options) {
+      let item = map.get(o.strike);
+      if (!item) {
+        item = { strike: o.strike, callOi: 0, putOi: 0, callOiUsd: 0, putOiUsd: 0, callIvSum: 0, callIvCount: 0, putIvSum: 0, putIvCount: 0 };
+        map.set(o.strike, item);
+      }
+      if (o.type === 'call') {
+        item.callOi += o.openInterestCoin;
+        item.callOiUsd += o.openInterestUsd;
+        item.callIvSum += o.iv;
+        item.callIvCount += 1;
+      } else {
+        item.putOi += o.openInterestCoin;
+        item.putOiUsd += o.openInterestUsd;
+        item.putIvSum += o.iv;
+        item.putIvCount += 1;
+      }
     }
 
-    return distribution;
+    // Convert to sorted array
+    return [...map.values()]
+      .sort((a, b) => a.strike - b.strike)
+      .map(item => ({
+        strike: item.strike,
+        callOi: item.callOi,
+        putOi: item.putOi,
+        callOiUsd: item.callOiUsd,
+        putOiUsd: item.putOiUsd,
+        callIv: item.callIvCount > 0 ? item.callIvSum / item.callIvCount : 0,
+        putIv: item.putIvCount > 0 ? item.putIvSum / item.putIvCount : 0,
+      }));
   }
 
   // Format large numbers

@@ -16,19 +16,11 @@ const API = (() => {
   async function fetchJSON(endpoint, params = {}) {
     const qs = new URLSearchParams(params).toString();
     const url = `${BASE_URL}/${endpoint}${qs ? '?' + qs : ''}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT);
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message || 'API error');
-      return data.result;
-    } catch (err) {
-      clearTimeout(timer);
-      throw err;
-    }
+    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || 'API error');
+    return data.result;
   }
 
   // Load from pre-generated JSON cache
@@ -92,11 +84,13 @@ const API = (() => {
   }
 
   async function fetchOptionData(currency) {
-    const result = await fetchJSON('get_book_summary_by_currency', { currency, kind: 'option' });
-    const spot = await fetchJSON('get_index_price', { index_name: `${currency.toLowerCase()}_usd` });
+    const [result, spot, instruments] = await Promise.all([
+      fetchJSON('get_book_summary_by_currency', { currency, kind: 'option' }),
+      fetchJSON('get_index_price', { index_name: `${currency.toLowerCase()}_usd` }),
+      fetchJSON('get_instruments', { currency, kind: 'option', expired: 'false' }),
+    ]);
     const spotPrice = spot?.index_price || 0;
 
-    const instruments = await fetchJSON('get_instruments', { currency, kind: 'option', expired: 'false' });
     const instrumentMap = new Map();
     for (const inst of instruments || []) instrumentMap.set(inst.instrument_name, inst);
 

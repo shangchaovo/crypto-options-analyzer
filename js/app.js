@@ -172,42 +172,25 @@ const App = (() => {
     renderSkew(skew);
   }
 
+  function renderPriceCard(prefix, price, change24h) {
+    $(`${prefix}-price`).textContent = price > 0 ? Analytics.formatPrice(price, prefix.toUpperCase()) : '--';
+    $(`${prefix}-change`).textContent = change24h !== 0 ? Analytics.formatPct(change24h) : '--';
+    $(`${prefix}-change`).className = 'price-change ' + (change24h >= 0 ? 'up' : 'down');
+  }
+
+  function renderPcr(pcr, valueId, hintId) {
+    $(valueId).textContent = pcr.toFixed(2);
+    const hint = pcr > 1 ? '看跌偏向' : pcr < 0.7 ? '看涨偏向' : '中性';
+    $(hintId).textContent = hint;
+    $(hintId).style.color = pcr > 1 ? 'var(--accent-put)' : pcr < 0.7 ? 'var(--accent-call)' : 'var(--text-muted)';
+  }
+
   function renderPriceSummary() {
-    const btc = state.btcPrice;
-    const eth = state.ethPrice;
+    renderPriceCard('btc', state.btcPrice.price, state.btcPrice.change24h);
+    renderPriceCard('eth', state.ethPrice.price, state.ethPrice.change24h);
 
-    $('btc-price').textContent = btc.price > 0
-      ? '$' + btc.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
-      : '--';
-    $('btc-change').textContent = btc.change24h !== 0
-      ? Analytics.formatPct(btc.change24h)
-      : '--';
-    $('btc-change').className = 'price-change ' + (btc.change24h >= 0 ? 'up' : 'down');
-
-    $('eth-price').textContent = eth.price > 0
-      ? '$' + eth.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
-      : '--';
-    $('eth-change').textContent = eth.change24h !== 0
-      ? Analytics.formatPct(eth.change24h)
-      : '--';
-    $('eth-change').className = 'price-change ' + (eth.change24h >= 0 ? 'up' : 'down');
-
-    // PCR
-    if (state.btcData) {
-      const pcr = state.btcData.overallPCR.pcr;
-      $('btc-pcr').textContent = pcr.toFixed(2);
-      const hint = pcr > 1 ? '看跌偏向' : pcr < 0.7 ? '看涨偏向' : '中性';
-      $('btc-pcr-hint').textContent = hint;
-      $('btc-pcr-hint').style.color = pcr > 1 ? 'var(--accent-put)' : pcr < 0.7 ? 'var(--accent-call)' : 'var(--text-muted)';
-    }
-
-    if (state.ethData) {
-      const pcr = state.ethData.overallPCR.pcr;
-      $('eth-pcr').textContent = pcr.toFixed(2);
-      const hint = pcr > 1 ? '看跌偏向' : pcr < 0.7 ? '看涨偏向' : '中性';
-      $('eth-pcr-hint').textContent = hint;
-      $('eth-pcr-hint').style.color = pcr > 1 ? 'var(--accent-put)' : pcr < 0.7 ? 'var(--accent-call)' : 'var(--text-muted)';
-    }
+    if (state.btcData) renderPcr(state.btcData.overallPCR.pcr, 'btc-pcr', 'btc-pcr-hint');
+    if (state.ethData) renderPcr(state.ethData.overallPCR.pcr, 'eth-pcr', 'eth-pcr-hint');
   }
 
   function renderExpiryTabs(data) {

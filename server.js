@@ -1,7 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { curlFetch } = require('./lib/curl-fetch');
 
 const PORT = 8766;
 const DERIBIT_API = 'www.deribit.com';
@@ -35,20 +35,6 @@ function serveStatic(req, res) {
       'Cache-Control': ext === '.html' ? 'no-cache' : 'max-age=3600',
     });
     res.end(data);
-  });
-}
-
-function curlFetch(url) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('curl', ['-s', '--max-time', '25', url]);
-    let stdout = '', stderr = '';
-    proc.stdout.on('data', chunk => stdout += chunk);
-    proc.stderr.on('data', chunk => stderr += chunk);
-    proc.on('close', code => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(stderr || `curl exited ${code}`));
-    });
-    proc.on('error', reject);
   });
 }
 
