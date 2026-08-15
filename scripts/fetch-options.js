@@ -10,6 +10,9 @@ const { curlFetch } = require('../lib/curl-fetch');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DERIBIT_API = 'www.deribit.com';
+const OUTPUT_PATH = path.join(DATA_DIR, 'options-data.json');
+const LOCK_PATH = path.join(DATA_DIR, '.options-update.lock');
+const STALE_LOCK_MS = 10 * 60 * 1000;
 
 function fetchJSON(endpoint, params = {}) {
   const qs = new URLSearchParams(params).toString();
@@ -19,6 +22,46 @@ function fetchJSON(endpoint, params = {}) {
     if (json.error) throw new Error(json.error.message);
     return json.result;
   });
+}
+
+function acquireLock() {
+  if (fs.existsSync(LOCK_PATH)) {
+    const ageMs = Date.now() - fs.statSync(LOCK_PATH).mtimeMs;
+    if (ageMs > STALE_LOCK_MS) fs.unlinkSync(LOCK_PATH);
+  }
+
+  const fd = fs.openSync(LOCK_PATH, 'wx');
+  fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+  return fd;
+}
+
+function releaseLock(fd) {
+  if (fd === null) return;
+  fs.closeSync(fd);
+  if (fs.existsSync(LOCK_PATH)) fs.unlinkSync(LOCK_PATH);
+}
+
+function validateCurrencyData(data) {
+  if (!Number.isFinite(data.spotPrice) || data.spotPrice <= 0) {
+    throw new Error(`${data.currency}: invalid spot price`);
+  }
+  if (!Array.isArray(data.options) || data.options.length === 0) {
+    throw new Error(`${data.currency}: no options returned`);
+  }
+  if (data.options.some(option => !option.expiry || !Number.isFinite(option.strike))) {
+    throw new Error(`${data.currency}: invalid option record`);
+  }
+}
+
+function writeJsonAtomic(filePath, payload) {
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    JSON.parse(fs.readFileSync(tempPath, 'utf8'));
+    fs.renameSync(tempPath, filePath);
+  } finally {
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+  }
 }
 
 function parseInstrument(name) {
@@ -31,7 +74,9 @@ function parseInstrument(name) {
   if (!match) return null;
   const [, day, monthStr, year] = match;
   const expiry = new Date(Date.UTC(+('20' + year), months[monthStr.toUpperCase()], +day, 8, 0, 0));
-  return { coin, dateStr, strike: parseFloat(strikeStr), type: type === 'C' ? 'call' : 'put', expiry: expiry.toISOString() };
+  const strike = parseFloat(strikeStr);
+  if (!Number.isFinite(strike) || Number.isNaN(expiry.getTime()) || (type !== 'C' && type !== 'P')) return null;
+  return { coin, dateStr, strike, type: type === 'C' ? 'call' : 'put', expiry: expiry.toISOString() };
 }
 
 async function fetchForCurrency(currency) {
@@ -73,23 +118,34 @@ async function fetchForCurrency(currency) {
 
 async function main() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  let lockFd = null;
 
   try {
+    lockFd = acquireLock();
     const [btc, eth] = await Promise.all([
       fetchForCurrency('BTC'),
       fetchForCurrency('ETH'),
     ]);
 
-    const payload = { btc, eth, fetchedAt: new Date().toISOString() };
-    const outPath = path.join(DATA_DIR, 'options-data.json');
-    fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
+    validateCurrencyData(btc);
+    validateCurrencyData(eth);
 
-    console.log(`✓ Saved to ${outPath}`);
-    console.log(`  BTC: ${btc.options.length} options, spot=$${btc.spotPrice.toLocaleString()}`);
-    console.log(`  ETH: ${eth.options.length} options, spot=$${eth.spotPrice.toLocaleString()}`);
+    const fetchedAt = new Date().toISOString();
+    const payload = { schemaVersion: 1, source: 'Deribit', btc, eth, fetchedAt };
+    writeJsonAtomic(OUTPUT_PATH, payload);
+
+    console.log(JSON.stringify({
+      ok: true,
+      fetchedAt,
+      output: OUTPUT_PATH,
+      btc: { options: btc.options.length, spotPrice: btc.spotPrice },
+      eth: { options: eth.options.length, spotPrice: eth.spotPrice },
+    }));
   } catch (err) {
-    console.error('Fetch failed:', err.message);
-    process.exit(1);
+    console.error(JSON.stringify({ ok: false, error: err.message }));
+    process.exitCode = 1;
+  } finally {
+    releaseLock(lockFd);
   }
 }
 

@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const { curlFetch } = require('./lib/curl-fetch');
 
-const PORT = 8766;
+const DEFAULT_PORT = Number(process.env.PORT || 8766);
+const HOST = process.env.HOST || '127.0.0.1';
 const DERIBIT_API = 'www.deribit.com';
 
 const MIME_TYPES = {
@@ -32,7 +33,7 @@ function serveStatic(req, res) {
     }
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'max-age=3600',
+      'Cache-Control': ['.html', '.css', '.js', '.json'].includes(ext) ? 'no-cache' : 'max-age=3600',
     });
     res.end(data);
   });
@@ -77,7 +78,23 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res);
 });
 
-server.listen(PORT, () => {
-  console.log(`Crypto Options Analyzer server running at http://localhost:${PORT}`);
-  console.log(`Deribit proxy: http://localhost:${PORT}/api/deribit/{endpoint}`);
+let activePort = DEFAULT_PORT;
+
+server.on('listening', () => {
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : activePort;
+  console.log(`Crypto Options Analyzer server running at http://localhost:${port}`);
+  console.log(`Deribit proxy: http://localhost:${port}/api/deribit/{endpoint}`);
 });
+
+server.on('error', err => {
+  if (err.code === 'EADDRINUSE' && !process.env.PORT && activePort === DEFAULT_PORT) {
+    activePort = DEFAULT_PORT + 1;
+    console.warn(`Port ${DEFAULT_PORT} is in use, trying ${activePort}...`);
+    server.listen(activePort, HOST);
+    return;
+  }
+  throw err;
+});
+
+server.listen(activePort, HOST);

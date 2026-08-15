@@ -83,8 +83,48 @@ const API = (() => {
     };
   }
 
-  async function fetchOptionData(currency) {
-    const [result, spot, instruments] = await Promise.all([
+  function calculateSkewFromBook(spot, bookSummary) {
+    if (!spot) return null;
+
+    const lowerStrike = spot * 0.88;
+    const upperStrike = spot * 1.12;
+    const now = Date.now();
+    let bestPut = null, bestCall = null;
+
+    for (const item of bookSummary || []) {
+      const parsed = parseInstrument(item.instrument_name);
+      if (!parsed) continue;
+      const daysToExpiry = (parsed.expiry - now) / (24 * 3600 * 1000);
+      if (daysToExpiry < 0 || daysToExpiry > 45) continue;
+
+      if (parsed.type === 'put') {
+        const distance = Math.abs(parsed.strike - lowerStrike);
+        if (!bestPut || distance < bestPut.distance) {
+          bestPut = { strike: parsed.strike, iv: item.iv || 0, distance };
+        }
+      } else {
+        const distance = Math.abs(parsed.strike - upperStrike);
+        if (!bestCall || distance < bestCall.distance) {
+          bestCall = { strike: parsed.strike, iv: item.iv || 0, distance };
+        }
+      }
+    }
+
+    if (!bestPut?.iv || !bestCall?.iv) return null;
+    const avgIv = (bestPut.iv + bestCall.iv) / 2;
+    if (!avgIv) return null;
+
+    return {
+      skew: ((bestPut.iv - bestCall.iv) / avgIv) * 100,
+      putIv: bestPut.iv,
+      callIv: bestCall.iv,
+      putStrike: bestPut.strike,
+      callStrike: bestCall.strike,
+    };
+  }
+
+  async function fetchMarketData(currency) {
+    const [bookSummary, spot, instruments] = await Promise.all([
       fetchJSON('get_book_summary_by_currency', { currency, kind: 'option' }),
       fetchJSON('get_index_price', { index_name: `${currency.toLowerCase()}_usd` }),
       fetchJSON('get_instruments', { currency, kind: 'option', expired: 'false' }),
@@ -95,13 +135,23 @@ const API = (() => {
     for (const inst of instruments || []) instrumentMap.set(inst.instrument_name, inst);
 
     const options = [];
-    for (const item of result || []) {
+    for (const item of bookSummary || []) {
       const inst = instrumentMap.get(item.instrument_name);
       const contractSize = inst?.contract_size || (currency === 'BTC' ? 0.1 : 1);
       const opt = normalizeOption(item, spotPrice, contractSize);
       if (opt) options.push(opt);
     }
-    return { spotPrice, options };
+    return {
+      spotPrice,
+      options,
+      price: { price: spotPrice, change24h: 0 },
+      skew: calculateSkewFromBook(spotPrice, bookSummary),
+    };
+  }
+
+  async function fetchOptionData(currency) {
+    const market = await fetchMarketData(currency);
+    return { spotPrice: market.spotPrice, options: market.options };
   }
 
   async function fetchSkewData(currency) {
@@ -110,30 +160,8 @@ const API = (() => {
       const spot = perp?.index_price || 0;
       if (!spot) return null;
 
-      const lowerStrike = spot * 0.88;
-      const upperStrike = spot * 1.12;
       const result = await fetchJSON('get_book_summary_by_currency', { currency, kind: 'option' });
-
-      let bestPut = null, bestCall = null;
-      for (const item of result || []) {
-        const parsed = parseInstrument(item.instrument_name);
-        if (!parsed) continue;
-        const daysToExpiry = (parsed.expiry - Date.now()) / (24 * 3600 * 1000);
-        if (daysToExpiry < 0 || daysToExpiry > 45) continue;
-
-        if (parsed.type === 'put' && Math.abs(parsed.strike - lowerStrike) < (bestPut ? Math.abs(bestPut.strike - lowerStrike) : Infinity)) {
-          bestPut = { strike: parsed.strike, iv: item.iv || 0 };
-        }
-        if (parsed.type === 'call' && Math.abs(parsed.strike - upperStrike) < (bestCall ? Math.abs(bestCall.strike - upperStrike) : Infinity)) {
-          bestCall = { strike: parsed.strike, iv: item.iv || 0 };
-        }
-      }
-
-      if (bestPut && bestCall && bestPut.iv && bestCall.iv) {
-        const skew = ((bestPut.iv - bestCall.iv) / ((bestPut.iv + bestCall.iv) / 2)) * 100;
-        return { skew, putIv: bestPut.iv, callIv: bestCall.iv, putStrike: bestPut.strike, callStrike: bestCall.strike };
-      }
-      return null;
+      return calculateSkewFromBook(spot, result);
     } catch {
       return null;
     }
@@ -149,6 +177,7 @@ const API = (() => {
   }
 
   return {
+    fetchMarketData,
     fetchOptionData,
     fetchSkewData,
     fetchPriceData,

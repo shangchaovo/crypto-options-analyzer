@@ -14,7 +14,7 @@ const App = (() => {
     ethPrice: { price: 0, change24h: 0 },
     btcSkew: null,
     ethSkew: null,
-    loading: true,
+    loading: false,
     autoRefreshInterval: null,
   };
 
@@ -45,16 +45,20 @@ const App = (() => {
     try {
       // Try API first, fallback to local JSON
       let btcRaw, ethRaw, btcPrice, ethPrice, btcSkew, ethSkew;
+      let sourceLabel = '实时';
+      let dataTimestamp = new Date();
 
       try {
-        [btcRaw, ethRaw, btcPrice, ethPrice, btcSkew, ethSkew] = await Promise.all([
-          API.fetchOptionData('BTC'),
-          API.fetchOptionData('ETH'),
-          API.fetchPriceData('BTC'),
-          API.fetchPriceData('ETH'),
-          API.fetchSkewData('BTC'),
-          API.fetchSkewData('ETH'),
+        const [btcMarket, ethMarket] = await Promise.all([
+          API.fetchMarketData('BTC'),
+          API.fetchMarketData('ETH'),
         ]);
+        btcRaw = { spotPrice: btcMarket.spotPrice, options: btcMarket.options };
+        ethRaw = { spotPrice: ethMarket.spotPrice, options: ethMarket.options };
+        btcPrice = btcMarket.price;
+        ethPrice = ethMarket.price;
+        btcSkew = btcMarket.skew;
+        ethSkew = ethMarket.skew;
       } catch (apiErr) {
         console.warn('API failed, trying local JSON:', apiErr.message);
         const cached = await API.fetchFromJson();
@@ -65,6 +69,8 @@ const App = (() => {
           ethPrice = { price: cached.eth.spotPrice, change24h: 0 };
           btcSkew = null;
           ethSkew = null;
+          sourceLabel = '缓存';
+          dataTimestamp = new Date(cached.fetchedAt || cached.btc.fetchedAt || Date.now());
         } else {
           throw apiErr;
         }
@@ -84,9 +90,9 @@ const App = (() => {
       }
 
       render();
-      $('last-update-time').textContent = new Date().toLocaleString('zh-CN', {
+      $('last-update-time').textContent = `${dataTimestamp.toLocaleString('zh-CN', {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-      });
+      })} · ${sourceLabel}`;
     } catch (err) {
       console.error('Load data error:', err);
       showError('数据加载失败，请检查网络连接或稍后重试');
