@@ -1,6 +1,19 @@
 # Crypto Options Concentration Analyzer
 
-期权集中押注分析工具 — 追踪 BTC/ETH 大资金在行权价上的分布与结算日期。
+追踪 BTC / ETH **大资金在行权价上的分布**与结算日期：持仓墙、Max Pain、PCR、25Δ Skew。
+
+> **线上请用后继产品。** 本仓库是可本地运行的原型；当前维护的是统一加密终端里的期权 Wall。
+
+**线上（后继）：[crypto-funding-arbitrage.pages.dev/#/options](https://crypto-funding-arbitrage.pages.dev/#/options)**  
+后继源码：[shangchaovo/crypto-funding-arbitrage](https://github.com/shangchaovo/crypto-funding-arbitrage)
+
+BTC/ETH **options concentration analyzer** — open-interest walls, max pain, put/call ratio, 25-delta skew. Vanilla JS + Deribit public API.
+
+## 核心用处
+
+- 一眼看到 Call / Put 筹码堆在哪些行权价
+- 用 Max Pain 看卖方更希望到期停在哪
+- 用 PCR 和 25Δ Skew 判断期权市场偏多还是偏空
 
 ## 核心功能
 
