@@ -1,11 +1,13 @@
 # 期权集中押注分析
 
-看 BTC、ETH 期权大资金押在哪些行权价、哪天到期。本机可以跑；线上我后来接到加密终端里去了。
+看 BTC、ETH 期权大资金押在哪些行权价、哪天到期。Call 绿色、Put 红色，柱子堆得高的地方就是筹码墙；再算每个到期日的 Max Pain（卖方最舒服的结算价）、整体 PCR，以及 25Δ Skew 看波动率偏哪边。
 
-现在看这一页就行：[期权 Wall](https://crypto-funding-arbitrage.pages.dev/#/options)  
+本机可以跑这一份。线上我后来把它并进加密终端的期权 Wall 了，数据和交互都在那边继续改。
+
+**现在请用：[crypto-funding-arbitrage.pages.dev/#/options](https://crypto-funding-arbitrage.pages.dev/#/options)**  
 终端源码：[crypto-funding-arbitrage](https://github.com/shangchaovo/crypto-funding-arbitrage)
 
-Call / Put 堆在哪、Max Pain 在哪、PCR 和 25Δ 偏度，一张图里。数据来自 Deribit 公开接口。
+数据来自 Deribit 公开接口，不用钥匙。大陆环境默认走本机 Surge/Clash（`127.0.0.1:1082`）。实时接口挂了会读本地 `data/options-data.json`，抓取脚本不会把半截 JSON 写进去。
 
 ## 这个页里有什么
 
